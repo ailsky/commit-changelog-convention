@@ -1,0 +1,546 @@
+#!/bin/bash
+
+# --- config area ---
+TYPES=(
+  feat
+  fix
+  docs
+  style
+  refactor
+  chore
+)
+SCOPES=(
+  admin-area
+  wallet-area
+  merchant-area
+  public-area
+  backend
+  frontend
+  common
+)
+CHILD_SCOPE_MAX_LENGTH=30
+SUBJECT_DESC_MAX_LENGTH=150
+# ALOWED_BRANCH_AS_TICKET_ID=(
+#   master
+#   stage
+# )
+# --- end config area ---
+
+pristineMessage=`cat $1`
+branch=`git symbolic-ref --short HEAD`
+linesCount=0
+lines=()
+subjectFormat='<type>(<scope>)[<ticket id>]: <subject>'
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+lineWithCommentRE="^(^#)|(\ #)"
+ticketIdFromBranchNameRE="^([0-9]+)-"
+
+echoAgro() {
+  text=$*
+  echo -e "${RED}$text${NC}"
+}
+echoAgro2() {
+  text=$*
+  echo -e "${YELLOW}$text${NC}"
+}
+
+echoLoyal() {
+  text=$*
+  echo -e "${GREEN}$text${NC}"
+}
+
+echoLoyal2() {
+  text=$*
+  echo -e "${BLUE}$text${NC}"
+}
+
+function ERROR_exitWithoutCommit() {
+  echo ""
+  echo "----"
+  echoAgro "An error occurred"
+  echo "----"
+  echo ""
+  exit 1
+}
+
+function ALL_OK_exitWithCommit() {
+  echo ""
+  echo "----"
+  echoLoyal "Commit has been completed successfully"
+  echo "----"
+  echo ""
+  exit 0
+}
+
+function echoPlainBranchNameFormat() {
+  echo "$(echoLoyal '<ticket id>')-$(echoLoyal '<text>')"
+}
+
+# calculate lines count and buld message without comments
+IFS='' # for keep spaces at the begining of lines
+while read line; do
+  if ! [[ "$line" =~ $lineWithCommentRE ]]; then
+    lines+=("$line")
+    linesCount=$((linesCount+1))
+  fi
+done <<< "$pristineMessage"
+
+echo ""
+echo "----"
+echo "Lines count: $linesCount"
+echo "$(echoAgro2 'All lines with comments are ignored (even if comments are at middle of the line)')"
+echo "$(echoAgro2 'Validation works only for brnaches with format:') $(echoPlainBranchNameFormat)"
+echo "----"
+echo ""
+
+# check line count
+if [ $linesCount -eq 0 ]; then
+  echo -e "$(echoAgro 'ERROR - Empty commit')"
+  ERROR_exitWithoutCommit;
+fi
+
+function echoFormat() {
+  echo -e "\
+  Format:
+      $(echoLoyal $subjectFormat)
+      $(echoLoyal '<blank line>')
+      $(echoLoyal '<body>')
+      $(echoLoyal '<blank line>')
+      $(echoLoyal '<footer>')\
+  "
+}
+
+function echoBranchNameFormat() {
+  echo -e "\
+  Branch name format:
+      $(echoPlainBranchNameFormat)
+
+      $(echoLoyal '<ticket id>')
+          a number
+
+      $(echoLoyal '<text>')
+          a string\
+  "
+}
+
+function echoSubjectFormat() {
+  echo -e "\
+  $(echoLoyal '<subject>') format: $(echoLoyal $subjectFormat)
+
+      $(echoLoyal '<type>')\
+  "
+
+  for type in "${TYPES[@]}"
+  do
+  	echo -e "\
+          $(echoLoyal2 $type)\
+    "
+  done
+
+  echo ""
+
+  echo -e "\
+      $(echoLoyal '<scope>')\
+  "
+
+  for scope in "${SCOPES[@]}"
+  do
+  	echo -e "\
+          $(echoLoyal2 $scope)\
+    "
+  done
+
+  echo ""
+
+  echo -e "\
+          $(echoLoyal '<[<parent scope>]<child scope>>')
+                $(echoLoyal '<parent scope>') it is any of $(echoLoyal '<scope>')
+                $(echoLoyal '<parent scope>') is required when you use $(echoLoyal '<child scope>')
+
+          $(echoLoyal '<child scope>')
+                max length $CHILD_SCOPE_MAX_LENGTH
+                $(echoLoyal2 'filename')
+                $(echoLoyal2 'folder')
+                $(echoLoyal2 'function')
+                $(echoLoyal2 'service')
+                $(echoLoyal2 'directive')
+                $(echoLoyal2 'controller')
+                $(echoLoyal2 'endpoint')
+                etc.
+
+      $(echoLoyal '<ticket id>')
+          a number
+
+      $(echoLoyal '<subject>')
+          max length $SUBJECT_DESC_MAX_LENGTH
+          first letter should be a lower letter (a-z)\
+  "
+}
+
+function echoBodyFormat() {
+  echo -e "\
+  $(echoLoyal '<body>') format:
+
+      1st $(echoLoyal '<lvl>'): $(echoLoyal '<dash><space><text>')
+          example:
+              - 1st lvl
+
+      2nd $(echoLoyal '<lvl>'): $(echoLoyal '<space><space><dash><space><text>')
+          example:
+              - 1st lvl
+                - 2nd lvl
+
+      $(echoLoyal '<lvl>') format: $(echoLoyal '<dash><space><text>')\
+  "
+}
+
+function echoBranchNameInvalidFormat() {
+  echo -e "\
+  $(echoAgro2 'Branch name is invalid'), $(echoLoyal2 'skip validation - any message is valid')
+
+  $(echoBranchNameFormat)\
+  "
+}
+
+function echoInvalidSubject() {
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid <subject> (1st line) of commit')
+
+  $(echoSubjectFormat)\
+  "
+}
+
+function echoEmptyLineAfterSubject() {
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid commit: commit contains 2 lines. Second line should devide <subject> and <body>, <body> should not be empty')
+
+  $(echoFormat)\
+  "
+}
+
+function echoInvalidDevideAfterSubject() {
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid divide line after subject')
+
+  $(echoFormat)
+
+  Divide line after subject should be an blank line\
+  "
+}
+
+function echoTicketIdNotEqual() {
+  echo -e "\
+  $(echoAgro 'ERROR - Branch id is not equal to <ticket id> inside <subject>')
+
+  $(echoFormat)\
+  "
+}
+
+function echoCantParseTicketIdFromSubject() {
+  echo -e "\
+  $(echoAgro 'ERROR - Can not parse <ticket id> from <subject>')
+
+  $(echoFormat)\
+  "
+}
+
+function echoEmptyBody() {
+  echo -e "\
+  $(echoAgro 'ERROR - <body> is empty')
+
+  $(echoFormat)\
+  "
+}
+
+function echoEmptyLineAfterBody() {
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid commit: Line next to body should devide <body> and <footer>, <footer> should not be empty')
+
+  $(echoFormat)\
+  "
+}
+
+function echoInvalidBodyString() {
+  i=$1
+
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid <body> at '$i' line')
+
+  $(echoBodyFormat)\
+  "
+}
+
+function echoInvalidBody1LVL() {
+  i=$1
+
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid <body> 1st lvl list at '$i' line')
+
+  $(echoBodyFormat)\
+  "
+}
+
+function echoInvalidBody2LVL() {
+  i=$1
+
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid <body> 2nd lvl list at '$i' line')
+
+  $(echoBodyFormat)\
+  "
+}
+
+function echoEmptyLineAfterFooter() {
+  echo -e "\
+  $(echoAgro 'ERROR - Invalid commit: <footer> contains empty strings')
+
+  $(echoFormat)\
+  "
+}
+
+function isBranchNameValid() {
+  if [[ $branch =~ $ticketIdFromBranchNameRE ]]; then
+    echo "y"
+  else
+    echo "n"
+  fi
+}
+
+function validateSubject() {
+  subject=$1
+
+  typesOrRE=""
+  scopesOrRE=""
+  # ticketIdRE="\[[0-9]+\]"
+
+  for type in "${TYPES[@]}"
+  do
+  	typesOrRE="$typesOrRE|$type"
+  done
+
+  for scope in "${SCOPES[@]}"
+  do
+  	scopesOrRE="$scopesOrRE|$scope"
+  done
+
+  # for branch in "${ALOWED_BRANCH_AS_TICKET_ID[@]}"
+  # do
+  # 	ticketIdRE="$ticketIdRE|$branch"
+  # done
+
+  typesOrRE=${typesOrRE#?} # remove first character
+  scopesOrRE=${scopesOrRE#?}
+
+  subjectRE="^($typesOrRE)((\(($scopesOrRE)\))|(\(\[($scopesOrRE)\][A-Za-z0-9\/\.-]{1,${CHILD_SCOPE_MAX_LENGTH}}\)))?\[[0-9]+\]\:\ [a-z].{1,${SUBJECT_DESC_MAX_LENGTH}}$"
+
+  ticketIdFromSubjectRE="^.+\[([0-9]+)\]\:"
+
+  # skip merge commit
+  mergeCommitRE="^Merge branch.*"
+  if [[ $subject =~ $mergeCommitRE ]]; then
+    ALL_OK_exitWithCommit
+  fi
+
+  if ! [[ $subject =~ $subjectRE ]]; then
+    echoInvalidSubject
+    ERROR_exitWithoutCommit
+  fi
+
+  # validate branch id and <ticet id>
+  if [[ $branch =~ $ticketIdFromBranchNameRE ]]; then
+     ticketIdFromBranch=${BASH_REMATCH[1]}
+
+     if [[ $subject =~ $ticketIdFromSubjectRE ]]; then
+       ticketIdFromSubject=${BASH_REMATCH[1]}
+
+       if [[ -n ticketIdFromBranch && ticketIdFromBranch -ne ticketIdFromSubject ]]; then
+         echoTicketIdNotEqual
+         ERROR_exitWithoutCommit
+       fi
+     # in theory this is imposible case, because subjectRE already check format of <ticket id>
+     else
+       echoCantParseTicketIdFromSubject
+       ERROR_exitWithoutCommit
+     fi
+  # in theory this is imposible case, because we check isBranchNameValid inside cycle before validate subject
+  else
+    echoCantParseTicketIdFromBranchName
+  fi
+}
+
+# format:
+# |- lvl 1 (without space) (<dash><space><text>)
+# |  - lvl 2 (2 space) (<space><space><dash><space><text>)
+# |- test
+# |- <scope>
+# |  - test
+function validateBodyString() {
+  i=$1
+  line=${lines[$i]}
+  firstLetter=${line:0:1}
+  secondLetter=${line:1:1}
+  thirdLetter=${line:2:1}
+  forthLetter=${line:3:1}
+  lastScope=""
+
+  # string should start from '-' or ' '
+  if [[ "$firstLetter" != "-" ]] && [[ "$firstLetter" != " " ]]; then
+    echoInvalidBodyString $i
+    ERROR_exitWithoutCommit
+  fi;
+
+  # validate 1 lvl
+  if [[ "$firstLetter" == "-" ]]; then
+    if [[ "$secondLetter" != " " ]]; then
+      echoInvalidBody1LVL $i
+      ERROR_exitWithoutCommit
+    fi
+  fi
+
+  # chain for 2 lvl
+  if [[ "$firstLetter" == " " ]]; then
+    # validate ' smth_exists'
+    if [[ "$secondLetter" != " " ]]; then
+      echoInvalidBodyString $i
+      ERROR_exitWithoutCommit
+    fi
+
+    # validate '  smth_exists_exclude_-'
+    if [[ "$thirdLetter" != "-" ]]; then
+      echoInvalidBodyString $i
+      ERROR_exitWithoutCommit
+    fi
+
+    # validate 2 lvl
+    if [[ "$thirdLetter" == "-" ]]; then
+      if [[ "$forthLetter" != " " ]]; then
+        echoInvalidBody2LVL $i
+        ERROR_exitWithoutCommit
+      fi
+    fi
+  fi
+}
+
+function validateFooterStart() {
+  i=$1
+  line=${lines[$i]}
+}
+
+function validateFooterString() {
+  i=$1
+  line=${lines[$i]}
+}
+
+function validateMessage() {
+  state=''
+  # declare -A map # for mac and windows bash version is 3, but it is only for v 4 (associative arrays)
+  #   we use a__ for array like variables instead
+
+  for i in "${!lines[@]}"; do
+    line=${lines[$i]}
+
+    # validate subject
+    if [[ $i -eq 0 ]]; then
+
+      if [[ $(isBranchNameValid) == 'n' ]]; then
+        echoBranchNameInvalidFormat
+        ALL_OK_exitWithCommit
+      fi
+
+      validateSubject "$line"
+
+      state="subject" # switch state
+
+      # a__subject__text=$line
+      a__subject__position=$i # should be 0
+    fi
+
+    # validate line next to subject (2nd line)
+    if [ $i -eq 1 ]; then
+      # if we have only 2 line and second line is emptty
+      if [ $linesCount -eq 2 ]; then
+        echoEmptyLineAfterSubject
+        ERROR_exitWithoutCommit
+      fi
+
+      state="blank_line_after_subject" # switch state
+
+      # a__blank_line_after_subject__text=$line # should be empty
+      a__blank_line_after_subject__position=$i # should be 1
+    fi
+
+    # validate start body (3rd line)
+    if [ $i -eq 2 ]; then
+      divideLine=${lines[1]} # 2nd line should be blank line
+
+      if [ -n "$divideLine" ]; then # if inside divide line something exists
+        echoInvalidDevideAfterSubject
+        ERROR_exitWithoutCommit;
+      fi
+
+      if [ -z "$line" ]; then # if 1st body line (3rd line in message) is empty
+        echoEmptyBody
+        ERROR_exitWithoutCommit
+      fi
+
+      state="body" # switch state
+
+      a__body__start=$i
+    fi
+
+    # validate body content
+    if [[ "$state" == "body" ]]; then
+      if [ -z "$line" ]; then # if current line is empty, so we on the devide line after body. NOTE: starting body was validating before, so at this moment body has at least one string
+        lineAfterDevide=${lines[$((i+1))]}
+        if [ -z "$lineAfterDevide" ]; then # if after divide line an empty line, so it is wrong devide: after body can be only footer
+          echoEmptyLineAfterBody
+          ERROR_exitWithoutCommit
+        fi
+
+        state="blank_line_after_body" # switch state
+
+        # a__blank_line_after_body__text=$line # should be empty
+        a__blank_line_after_body__position=$i
+        a__body__end=$(($i-1))
+      else
+        validateBodyString $i
+        # a__body__text__$i=$line
+      fi
+    fi
+
+    if [[ "$state" == "blank_line_after_body" ]]; then # if blank_line_after_body position (which has been saving before) is diff from current position so we are already under it
+      if [[ "$a__blank_line_after_body__position" != "$i" ]]; then
+
+        state="footer" # switch state
+
+        a__footer__start=$i
+      fi
+    fi
+
+    # validate footer content
+    if [[ "$state" == "footer" ]]; then
+      if [ -z "$line" ]; then # footer shouldn't contain empty strings. NOTE: starting footer was validating before (inside state === body), so at this moment footer has at least one string
+        echoEmptyLineAfterFooter
+        ERROR_exitWithoutCommit
+      fi
+
+      if [[ "$a__footer__start" == "$i" ]]; then
+        validateFooterStart $i
+        # a__footer__text__$i=$line
+      else
+        validateFooterString $i
+        # a__footer__text__$i=$line
+      fi
+    fi
+
+  done
+}
+
+validateMessage
+ALL_OK_exitWithCommit
