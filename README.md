@@ -7,6 +7,7 @@
   ```
   <type>(<scope>)[<branch id>]: <subject>
   <BLANK LINE>
+  <body>
   <BLANK LINE>
   <footer>
   ```
