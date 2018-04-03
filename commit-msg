@@ -9,14 +9,24 @@ CHILD_SCOPE_MAX_LENGTH=30
 SUBJECT_DESC_MAX_LENGTH=150
 ALLOW_EMPTY_FINISH_LINE=TRUE
 
-# ALOWED_BRANCH_AS_TICKET_ID=(
-#   master
-#   stage
-# )
+# ALLOWED_BRANCH_AS_TICKET_ID=(master stage)
+# --- end config area ---
 
 # Override configs if custom configs file exists
-test -s .git/hooks/commit-msg-configs && export $(cat .git/hooks/commit-msg-configs | grep -v ^# | xargs)
-# --- end config area ---
+if test -s .git/hooks/commit-msg-configs
+then
+    while read line
+    do
+    if [ -n "$line" ]; then
+        key=$(echo $line | cut -d '=' -f1)
+        value=$(echo $line | cut -d '=' -f2)
+        declare "$key"="$value"
+    fi
+    done <<< "$(cat .git/hooks/commit-msg-configs | grep -v ^#)"
+fi
+
+# Convert case of boolean variables
+ALLOW_EMPTY_FINISH_LINE=$(echo "$ALLOW_EMPTY_FINISH_LINE" | tr '[:lower:]' '[:upper:]')
 
 pristineMessage=`cat $1`
 branch=`git symbolic-ref --short HEAD`
@@ -32,9 +42,6 @@ NC='\033[0m' # No Color
 
 lineWithCommentRE="^(^#)|(\ #)"
 ticketIdFromBranchNameRE="^([0-9]+)-"
-
-# Convert case
-ALLOW_EMPTY_FINISH_LINE=$(echo "$ALLOW_EMPTY_FINISH_LINE" | tr '[:lower:]' '[:upper:]')
 
 echoAgro() {
   text=$*
@@ -76,30 +83,6 @@ function ALL_OK_exitWithCommit() {
 function echoPlainBranchNameFormat() {
   echo "$(echoLoyal '<ticket id>')-$(echoLoyal '<text>')"
 }
-
-# calculate lines count and buld message without comments
-IFS='' # for keep spaces at the begining of lines
-while read line; do
-  if ! [[ "$line" =~ $lineWithCommentRE ]]; then
-    lines+=("$line")
-    linesCount=$((linesCount+1))
-  fi
-done <<< "$pristineMessage"
-
-echo ""
-echo "----"
-echo "$(echoLoyal 'Git commit convention check was started in commit-msg hook')"
-echo "Lines count: $linesCount"
-echo "$(echoAgro2 'All lines with comments are ignored (even if comments are at middle of the line)')"
-echo "$(echoAgro2 'Validation works only for brnaches with format:') $(echoPlainBranchNameFormat)"
-echo "----"
-echo ""
-
-# check line count
-if [ $linesCount -eq 0 ]; then
-  echo -e "$(echoAgro 'ERROR - Empty commit')"
-  ERROR_exitWithoutCommit;
-fi
 
 function echoFormat() {
   echo -e "\
@@ -325,7 +308,7 @@ function validateSubject() {
   	scopesOrRE="$scopesOrRE|$scope"
   done
 
-  # for branch in "${ALOWED_BRANCH_AS_TICKET_ID[@]}"
+  # for branch in "${ALLOWED_BRANCH_AS_TICKET_ID[@]}"
   # do
   # 	ticketIdRE="$ticketIdRE|$branch"
   # done
@@ -537,6 +520,30 @@ function validateMessage() {
 
   done
 }
+
+# calculate lines count and buld message without comments
+IFS='' # for keep spaces at the begining of lines
+while read line; do
+  if ! [[ "$line" =~ $lineWithCommentRE ]]; then
+    lines+=("$line")
+    linesCount=$((linesCount+1))
+  fi
+done <<< "$pristineMessage"
+
+echo ""
+echo "----"
+echo "$(echoLoyal 'Git commit convention check was started in commit-msg hook')"
+echo "Lines count: $linesCount"
+echo "$(echoAgro2 'All lines with comments are ignored (even if comments are at middle of the line)')"
+echo "$(echoAgro2 'Validation works only for brnaches with format:') $(echoPlainBranchNameFormat)"
+echo "----"
+echo ""
+
+# check line count
+if [ $linesCount -eq 0 ]; then
+  echo -e "$(echoAgro 'ERROR - Empty commit')"
+  ERROR_exitWithoutCommit;
+fi
 
 validateMessage
 ALL_OK_exitWithCommit
