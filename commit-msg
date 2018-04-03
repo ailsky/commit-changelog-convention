@@ -1,29 +1,21 @@
 #!/bin/bash
 
 # --- config area ---
-TYPES=(
-  feat
-  fix
-  docs
-  style
-  refactor
-  chore
-)
-SCOPES=(
-  admin-area
-  wallet-area
-  merchant-area
-  public-area
-  backend
-  frontend
-  common
-)
+TYPES=(feat fix docs style refactor chore)
+
+SCOPES=(backend frontend public common)
+
 CHILD_SCOPE_MAX_LENGTH=30
 SUBJECT_DESC_MAX_LENGTH=150
+ALLOW_EMPTY_FINISH_LINE=TRUE
+
 # ALOWED_BRANCH_AS_TICKET_ID=(
 #   master
 #   stage
 # )
+
+# Override configs if custom configs file exists
+test -s .git/hooks/commit-msg-configs && export $(cat .git/hooks/commit-msg-configs | grep -v ^# | xargs)
 # --- end config area ---
 
 pristineMessage=`cat $1`
@@ -40,6 +32,9 @@ NC='\033[0m' # No Color
 
 lineWithCommentRE="^(^#)|(\ #)"
 ticketIdFromBranchNameRE="^([0-9]+)-"
+
+# Convert case
+ALLOW_EMPTY_FINISH_LINE=$(echo "$ALLOW_EMPTY_FINISH_LINE" | tr '[:lower:]' '[:upper:]')
 
 echoAgro() {
   text=$*
@@ -93,6 +88,7 @@ done <<< "$pristineMessage"
 
 echo ""
 echo "----"
+echo "$(echoLoyal 'Git commit convention check was started in commit-msg hook')"
 echo "Lines count: $linesCount"
 echo "$(echoAgro2 'All lines with comments are ignored (even if comments are at middle of the line)')"
 echo "$(echoAgro2 'Validation works only for brnaches with format:') $(echoPlainBranchNameFormat)"
@@ -464,7 +460,7 @@ function validateMessage() {
     # validate line next to subject (2nd line)
     if [ $i -eq 1 ]; then
       # if we have only 2 line and second line is emptty
-      if [ $linesCount -eq 2 ]; then
+      if [[ $linesCount -eq 2 && "$ALLOW_EMPTY_FINISH_LINE" = FALSE ]]; then
         echoEmptyLineAfterSubject
         ERROR_exitWithoutCommit
       fi
@@ -498,7 +494,7 @@ function validateMessage() {
     if [[ "$state" == "body" ]]; then
       if [ -z "$line" ]; then # if current line is empty, so we on the devide line after body. NOTE: starting body was validating before, so at this moment body has at least one string
         lineAfterDevide=${lines[$((i+1))]}
-        if [ -z "$lineAfterDevide" ]; then # if after divide line an empty line, so it is wrong devide: after body can be only footer
+        if [[ -z "$lineAfterDevide" && "$ALLOW_EMPTY_FINISH_LINE" = FALSE ]]; then # if after divide line an empty line, so it is wrong devide: after body can be only footer
           echoEmptyLineAfterBody
           ERROR_exitWithoutCommit
         fi
@@ -525,7 +521,7 @@ function validateMessage() {
 
     # validate footer content
     if [[ "$state" == "footer" ]]; then
-      if [ -z "$line" ]; then # footer shouldn't contain empty strings. NOTE: starting footer was validating before (inside state === body), so at this moment footer has at least one string
+      if [[ -z "$line" && "$ALLOW_EMPTY_FINISH_LINE" = FALSE ]]; then # footer shouldn't contain empty strings. NOTE: starting footer was validating before (inside state === body), so at this moment footer has at least one string
         echoEmptyLineAfterFooter
         ERROR_exitWithoutCommit
       fi
