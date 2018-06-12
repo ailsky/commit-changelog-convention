@@ -13,7 +13,7 @@ ALLOW_EMPTY_FINISH_LINE=TRUE
 # --- end config area ---
 
 # Override configs if custom configs file exists
-if test -s .git/hooks/commit-msg-configs
+if test -s .git/hooks/3c-hook-configs
 then
     while read line
     do
@@ -22,7 +22,7 @@ then
         value=$(echo $line | cut -d '=' -f2)
         declare "$key"="$value"
     fi
-    done <<< "$(cat .git/hooks/commit-msg-configs | grep -v ^#)"
+    done <<< "$(cat .git/hooks/3c-hook-configs | grep -v ^#)"
 fi
 
 # Convert case of boolean variables
