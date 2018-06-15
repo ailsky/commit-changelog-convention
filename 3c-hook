@@ -12,8 +12,17 @@ ALLOW_EMPTY_FINISH_LINE=TRUE
 # ALLOWED_BRANCH_AS_TICKET_ID=(master stage)
 # --- end config area ---
 
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+CONFIGS_PATH="$DIR/3c-hook-configs"
+
 # Override configs if custom configs file exists
-if test -s .git/hooks/3c-hook-configs
+if test -s $CONFIGS_PATH
 then
     while read line
     do
@@ -22,7 +31,7 @@ then
         value=$(echo $line | cut -d '=' -f2)
         declare "$key"="$value"
     fi
-    done <<< "$(cat .git/hooks/3c-hook-configs | grep -v ^#)"
+    done <<< "$(cat $CONFIGS_PATH | grep -v ^#)"
 fi
 
 # Convert case of boolean variables

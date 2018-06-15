@@ -19,4 +19,4 @@ Copy `3c-hook` as `commit-msg` or `pre-commit` to `.git/hooks`.
 
 ## Custom configuration
 
-Place `3c-hook-configs` near the hook (to `.git/hooks`) and override any config from `config area` in the hook.
+Place `3c-hook-configs` near the hook and override any config from `config area` in the hook.
